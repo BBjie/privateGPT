@@ -1,5 +1,5 @@
-### IMPORTANT, THIS IMAGE CAN ONLY BE RUN IN LINUX DOCKER
-### You will run into a segfault in mac
+# IMPORTANT, THIS IMAGE CAN ONLY BE RUN IN LINUX DOCKER
+# You will run into a segfault on Mac
 FROM python:3.11.6-slim-bookworm as base
 
 # Install poetry
@@ -11,41 +11,62 @@ ENV PATH=".venv/bin/:$PATH"
 
 # Dependencies to build llama-cpp
 RUN apt update && apt install -y \
-  libopenblas-dev\
-  ninja-build\
-  build-essential\
-  pkg-config\
-  wget
+    libopenblas-dev \
+    ninja-build \
+    build-essential \
+    pkg-config \
+    wget
 
-# https://python-poetry.org/docs/configuration/#virtualenvsin-project
+# Set the environment variable for Poetry to create the virtual environments within the project's directory
 ENV POETRY_VIRTUALENVS_IN_PROJECT=true
 
+# Start the dependencies stage
 FROM base as dependencies
 WORKDIR /home/worker/app
 COPY pyproject.toml poetry.lock ./
 
+# Install dependencies with Poetry
 RUN poetry install --with local
 RUN poetry install --with ui
 
+# Start the app stage
 FROM base as app
 
+# Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8080
+
+# Expose the port the app runs on
 EXPOSE 8080
 
-# Prepare a non-root user
-RUN adduser --system worker
+# Create a non-root user 'worker' with a home directory at '/home/worker'
+RUN adduser --system --group worker
 WORKDIR /home/worker/app
 
-RUN mkdir local_data; chown worker local_data
-RUN mkdir models; chown worker models
+# Create directories for local_data and models and ensure 'worker' owns them
+RUN mkdir local_data models
+RUN chown worker:worker local_data models
+
+# Copy the installed dependencies from the 'dependencies' stage
 COPY --chown=worker --from=dependencies /home/worker/app/.venv/ .venv
+
+# Copy your application code and change the ownership to 'worker'
 COPY --chown=worker private_gpt/ private_gpt
+
+# Move files from private_gpt/models to the models directory and confirm by listing
+# RUN mv private_gpt/models/* models/ && ls -la models/
+
+# Continue copying the rest of the application files
 COPY --chown=worker fern/ fern
 COPY --chown=worker *.yaml *.md ./
 COPY --chown=worker scripts/ scripts
 
-ENV PYTHONPATH="$PYTHONPATH:/private_gpt/"
+# Set PYTHONPATH to include the private_gpt directory
+ENV PYTHONPATH="$PYTHONPATH:/home/worker/app/private_gpt/"
 
+# Set 'worker' as the current user
 USER worker
+
+# Define the entry point for the container
 ENTRYPOINT python -m private_gpt
+

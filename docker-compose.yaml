@@ -3,7 +3,7 @@ services:
     image: vllm/vllm-openai:latest
     command: --model facebook/opt-125m
     environment:
-      - HUGGING_FACE_HUB_TOKEN=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
+      - HUGGING_FACE_HUB_TOKEN=
     volumes:
       - ~/.cache/huggingface:/root/.cache/huggingface
     ports:
